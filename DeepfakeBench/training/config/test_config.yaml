@@ -1,0 +1,65 @@
+mode: test
+lmdb: True
+rgb_dir: '/data/disk2/yer/ASOTA/DeepfakeBench/datasets/rgb'
+lmdb_dir:  '/data/disk2/yer/ASOTA/DeepfakeBench/datasets/lmdb'
+dataset_json_folder: './preprocessing/dataset_json_v3'
+label_dict:
+  # DFD
+  DFD_fake: 1
+  DFD_real: 0
+  # FF++ + FaceShifter(FF-real+FF-FH)
+  FF-SH: 1
+  FF-F2F: 1
+  FF-DF: 1
+  FF-FS: 1
+  FF-NT: 1
+  FF-FH: 1
+  FF-real: 0
+  # CelebDF
+  CelebDFv1_real: 0
+  CelebDFv1_fake: 1
+  CelebDFv2_real: 0
+  CelebDFv2_fake: 1
+  # DFDCP
+  DFDCP_Real: 0
+  DFDCP_FakeA: 1
+  DFDCP_FakeB: 1
+  # DFDC
+  DFDC_Fake: 1
+  DFDC_Real: 0
+  # DeeperForensics-1.0
+  DF_fake: 1
+  DF_real: 0
+  # UADFV
+  UADFV_Fake: 1
+  UADFV_Real: 0
+  # Roop
+  roop_Real: 0
+  roop_Fake: 1
+  # BlendFace
+  blendface_real: 0
+  blendface_fake: 1
+  #WDF
+  WDF_real: 0
+  WDF_fake: 1
+  #uniface
+  uniface_real: 0
+  uniface_fake: 1
+  #facedancer
+  facedancer_real: 0
+  facedancer_fake: 1
+  #e4s
+  e4s_real: 0
+  e4s_fake: 1
+  #inswap
+  inswap_real: 0
+  inswap_fake: 1
+  #simswap
+  simswap_real: 0
+  simswap_fake: 1
+  #fsgan
+  fsgan_real: 0
+  fsgan_fake: 1
+  #mobileswap
+  mobileswap_real: 0
+  mobileswap_fake: 1
