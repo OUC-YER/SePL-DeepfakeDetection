@@ -2,7 +2,7 @@
 使用:
   cd /data/disk2/yer/ASOTA/DeepfakeBench
   python training/tsne_effort.py \
-      --detector_path ./training/config/detector/effort.yaml \
+      --detector_path ./training/config/detector/sepl.yaml \
       --weights_path ./training/weights/ckpt_best.pth \
       --test_dataset FF-real FF-DF FF-F2F FF-FS FF-NT \
       --max_samples 2000 \
@@ -36,9 +36,9 @@ from detectors import DETECTOR
 
 
 # ==================== 参数解析 ====================
-parser = argparse.ArgumentParser(description='EFFORT t-SNE Visualization')
+parser = argparse.ArgumentParser(description='t-SNE Visualization')
 parser.add_argument('--detector_path', type=str,
-                    default='./training/config/detector/effort.yaml',
+                    default='./training/config/detector/sepl.yaml',
                     help='path to detector YAML file')
 parser.add_argument('--weights_path', type=str,
                     default='./training/weights/ckpt_best.pth',
@@ -58,7 +58,6 @@ args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# ==================== 工具函数 ====================
 def init_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
@@ -68,14 +67,12 @@ def init_seed(seed=42):
 
 
 def load_config():
-    """加载配置文件"""
     with open(args.detector_path, 'r') as f:
         config = yaml.safe_load(f)
     with open('./training/config/test_config.yaml', 'r') as f:
         config2 = yaml.safe_load(f)
     config.update(config2)
 
-    # 设置路径
     config['lmdb_dir'] = '/data/disk2/yer/ASOTA/DeepfakeBench/datasets/lmdb'
     config['workers'] = 4
     config['test_dataset'] = args.test_dataset
@@ -85,7 +82,6 @@ def load_config():
 
 
 def prepare_dataloader(config):
-    """准备测试数据加载器"""
     test_data_loaders = {}
     for test_name in config['test_dataset']:
         cfg = config.copy()
@@ -104,7 +100,6 @@ def prepare_dataloader(config):
 
 
 def load_model(config):
-    """加载模型和权重"""
     model_class = DETECTOR[config['model_name']]
     model = model_class(config).to(device)
 
@@ -112,7 +107,6 @@ def load_model(config):
     if 'state_dict' in ckpt:
         ckpt = ckpt['state_dict']
 
-    # 去掉 module. 前缀
     new_weights = {}
     for key, value in ckpt.items():
         new_key = key.replace('module.', '')
@@ -127,27 +121,23 @@ def load_model(config):
     return model
 
 
-# ==================== 特征提取 ====================
 @torch.no_grad()
 def extract_all_features(model, test_data_loaders):
     """
-    提取三种特征: feat_backbone, artifact_feat, content_feat
-    以及对应的二分类标签和数据来源标签
+     feat_backbone, artifact_feat, content_feat
     """
     model.eval()
 
     all_feat_backbone = []
     all_artifact_feat = []
     all_content_feat = []
-    all_labels = []          # 二分类标签: 0=Real, 1=Fake
-    all_source_labels = []   # 数据来源标签: 用于多类可视化(可选)
+    all_labels = []          # 0=Real, 1=Fake
+    all_source_labels = []
 
-    # 数据来源名称到编号的映射
     source_to_id = {}
     source_id_counter = 0
 
     for dataset_name, loader in test_data_loaders.items():
-        # 记录数据来源
         if dataset_name not in source_to_id:
             source_to_id[dataset_name] = source_id_counter
             source_id_counter += 1
@@ -156,16 +146,14 @@ def extract_all_features(model, test_data_loaders):
         print(f'\n--- Extracting features from: {dataset_name} ---')
 
         for i, data_dict in tqdm(enumerate(loader), total=len(loader), desc=dataset_name):
-            # 准备数据 (与 test.py 一致)
             data = data_dict['image']
             label = data_dict['label']
             mask = data_dict.get('mask', None)
             landmark = data_dict.get('landmark', None)
 
-            # 二分类标签
             label = torch.where(label != 0, 1, 0)
 
-            # 移到 GPU
+            # GPU
             data_dict['image'] = data.to(device)
             data_dict['label'] = label.to(device)
             if mask is not None:
@@ -173,17 +161,15 @@ def extract_all_features(model, test_data_loaders):
             if landmark is not None:
                 data_dict['landmark'] = landmark.to(device)
 
-            # 前向传播
             predictions = model(data_dict, inference=True)
 
-            # 收集三种特征
             all_feat_backbone.append(predictions['feat_backbone'].cpu().numpy())
             all_artifact_feat.append(predictions['artifact_feat'].cpu().numpy())
             all_content_feat.append(predictions['content_feat'].cpu().numpy())
             all_labels.append(label.cpu().numpy())
             all_source_labels.extend([source_id] * label.size(0))
 
-    # 拼接所有 batch
+    # batch
     feat_dict = {
         'feat_backbone': np.concatenate(all_feat_backbone, axis=0),
         'artifact_feat': np.concatenate(all_artifact_feat, axis=0),
@@ -202,9 +188,7 @@ def extract_all_features(model, test_data_loaders):
 
 
 def balance_and_sample(feat_dict, max_samples_per_class):
-    """
-    平衡采样: 每类取 max_samples_per_class 个样本
-    """
+
     labels = feat_dict['labels']
 
     real_indices = np.where(labels == 0)[0]
@@ -212,7 +196,7 @@ def balance_and_sample(feat_dict, max_samples_per_class):
 
     n_real = min(len(real_indices), max_samples_per_class)
     n_fake = min(len(fake_indices), max_samples_per_class)
-    n_samples = min(n_real, n_fake)  # 取两类中较小的
+    n_samples = min(n_real, n_fake)
 
     sampled_real = np.random.choice(real_indices, size=n_samples, replace=False)
     sampled_fake = np.random.choice(fake_indices, size=n_samples, replace=False)
@@ -229,7 +213,7 @@ def balance_and_sample(feat_dict, max_samples_per_class):
     return sampled_dict
 
 
-# ==================== t-SNE 可视化 ====================
+# ==================== t-SNE ====================
 def run_tsne(features, perplexity=30, seed=42):
     """对特征执行 t-SNE 降维"""
     print(f'Running t-SNE (perplexity={perplexity}) on shape {features.shape}...')
@@ -247,7 +231,6 @@ def run_tsne(features, perplexity=30, seed=42):
 
 def plot_tsne_three_panel(feat_dict, output_path, perplexity=30, seed=42):
     """
-    绘制三张 t-SNE 对比图:
       图1: feat_backbone (解耦前)
       图2: artifact_feat (伪影特征)
       图3: content_feat  (内容特征)
@@ -255,11 +238,10 @@ def plot_tsne_three_panel(feat_dict, output_path, perplexity=30, seed=42):
     labels = feat_dict['labels']
 
     # 定义颜色和标签
-    color_map = {0: '#2196F3', 1: '#F44336'}   # 蓝=Real, 红=Fake
-    marker_map = {0: '*', 1: 'o'}               # 星=Real, 圆=Fake
+    color_map = {0: '#2196F3', 1: '#F44336'}
+    marker_map = {0: '*', 1: 'o'}
     label_name = {0: 'Real', 1: 'Fake'}
 
-    # 三种特征
     feat_keys = ['feat_backbone', 'artifact_feat', 'content_feat']
     titles = [
         '(a) Backbone Features\n(Before Decoupling)',
@@ -267,21 +249,17 @@ def plot_tsne_three_panel(feat_dict, output_path, perplexity=30, seed=42):
         '(c) Content Features\n(After Decoupling)',
     ]
 
-    # 创建图
     fig, axs = plt.subplots(1, 3, figsize=(24, 7))
 
     for idx, (feat_key, title) in enumerate(zip(feat_keys, titles)):
         feat = feat_dict[feat_key]
 
-        # 展平特征 (以防万一)
         feat = feat.reshape(feat.shape[0], -1)
 
-        # t-SNE 降维
         transformed = run_tsne(feat, perplexity=perplexity, seed=seed)
 
         ax = axs[idx]
 
-        # 分别绘制 Real 和 Fake
         for cls in [0, 1]:
             mask = labels == cls
             ax.scatter(
@@ -301,7 +279,6 @@ def plot_tsne_three_panel(feat_dict, output_path, perplexity=30, seed=42):
         ax.legend(fontsize=13, loc='upper right', framealpha=0.9,
                   markerscale=1.5, handletextpad=0.3)
 
-        # 加一个轻微的边框
         for spine in ax.spines.values():
             spine.set_visible(True)
             spine.set_linewidth(0.5)
@@ -313,34 +290,26 @@ def plot_tsne_three_panel(feat_dict, output_path, perplexity=30, seed=42):
     print(f'\n===> Figure saved to: {output_path}')
 
 
-# ==================== 主函数 ====================
 def main():
     init_seed(args.seed)
 
-    # 1. 加载配置
     config = load_config()
 
-    # 2. 加载模型
     model = load_model(config)
 
-    # 3. 准备数据
     test_data_loaders = prepare_dataloader(config)
 
-    # 4. 提取特征
     feat_dict = extract_all_features(model, test_data_loaders)
 
-    # 5. 平衡采样
     feat_dict = balance_and_sample(feat_dict, max_samples_per_class=args.max_samples)
 
-    # 6. 保存特征 (可选, 方便以后复用)
     os.makedirs(args.output_dir, exist_ok=True)
     pkl_path = os.path.join(args.output_dir, 'tsne_features.pkl')
     with open(pkl_path, 'wb') as f:
         pickle.dump(feat_dict, f)
     print(f'Features saved to: {pkl_path}')
 
-    # 7. 绘制 t-SNE 三图对比
-    output_path = os.path.join(args.output_dir, 'tsne_effort_decoupling.png')
+    output_path = os.path.join(args.output_dir, 'tsne_decoupling.png')
     plot_tsne_three_panel(
         feat_dict,
         output_path=output_path,
