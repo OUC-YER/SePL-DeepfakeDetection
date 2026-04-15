@@ -1,17 +1,17 @@
 """
 Robustness Evaluation
 ========================================
-DeeperForensics-1.0 [CVPR 2020]
+following DeeperForensics-1.0 [CVPR 2020]
 using:
     python training/test_robustness.py \
-        --detector_path ./training/config/detector/cdpd.yaml \
-        --weights_path ./weights/cdpd_ckpt.pth \
+        --detector_path ./training/config/detector/sepl.yaml \
+        --weights_path ./weights/ckpt_best.pth \
         --test_dataset FaceForensics++
 
     #
     python training/test_robustness.py \
-        --detector_path ./training/config/detector/cdpd.yaml \
-        --weights_path ./weights/cdpd_ckpt.pth \
+        --detector_path ./training/config/detector/sepl.yaml \
+        --weights_path ./weights/ckpt_best.pth \
         --test_dataset FaceForensics++ \
         --perturbation_types CS GB GNC
 """
@@ -82,7 +82,6 @@ class RobustnessTestDataset(DeepfakeAbstractBaseDataset):
 
             image = np.array(image)  # RGB, uint8, (H, W, 3)
 
-            # ★★★ 关键修改: 在这里施加扰动 ★★★
             if self.perturbation_type is not None and self.severity_level > 0:
                 image = apply_perturbation(
                     image, self.perturbation_type, self.severity_level
@@ -101,7 +100,7 @@ class RobustnessTestDataset(DeepfakeAbstractBaseDataset):
             else:
                 landmarks = None
 
-            # Test mode: 不做数据增强
+            # Test mode
             image_trans = deepcopy(image)
             landmarks_trans = deepcopy(landmarks)
             mask_trans = deepcopy(mask)
@@ -238,7 +237,7 @@ def run_robustness_evaluation(model, config, test_dataset_name,
             results[ptype][f'level_{level}'] = auc_pct
             print(f"Video-AUC = {auc_pct:.2f}%")
 
-    # ---- Step 2: 计算 Average ----
+    # ---- Step 2:  Average ----
     results['Average'] = {}
     for level in severity_levels:
         vals = [results[pt][f'level_{level}'] for pt in perturbation_types
@@ -326,7 +325,6 @@ def plot_robustness_curves(results, perturbation_types=None, output_path='robust
         ax.plot(severity_levels, aucs, color=color, marker=marker,
                 linewidth=1.5, markersize=5, label='Ours')
 
-        # 画 clean baseline 虚线
         clean_auc = results.get('Clean', {}).get('level_0', 0)
         ax.axhline(y=clean_auc, color='gray', linestyle='--', alpha=0.5, linewidth=0.8)
 
@@ -346,10 +344,10 @@ def plot_robustness_curves(results, perturbation_types=None, output_path='robust
 def parse_args():
     parser = argparse.ArgumentParser(description='Robustness Evaluation (DeeperForensics-1.0 Protocol)')
     parser.add_argument('--detector_path', type=str,
-                        default='./training/config/detector/cdpd.yaml',
+                        default='./training/config/detector/sepl.yaml',
                         help='path to detector YAML config')
     parser.add_argument('--weights_path', type=str,
-                        default='./weights/cdpd_ckpt.pth',
+                        default='./weights/ckpt_best.pth',
                         help='path to model weights')
     parser.add_argument('--test_dataset', type=str, nargs='+',
                         default=['FaceForensics++'],
