@@ -32,15 +32,15 @@ class SePLDetector(nn.Module):
 
         self.gate_init_bias = self._get_cfg_float('gate_init_bias', 3.0)
         self.backbone_dim = int(self._get_cfg_float('backbone_dim', 1024))
-        self.content_dim = int(self._get_cfg_float('content_dim', 512))
-        self.artifact_dim = int(self._get_cfg_float('artifact_dim', 512))
+        self.forgery_irrelevant_dim = int(self._get_cfg_float('forgery_irrelevant_dim', 512))
+        self.forgery_specific_dim = int(self._get_cfg_float('forgery_specific_dim', 512))
         self.n_ctx = int(self._get_cfg_float('n_ctx', 16))
         self.meta_net_hidden_dim = int(self._get_cfg_float('meta_net_hidden_dim', 256))
 
         self.lambda_contrast = self._get_cfg_float('lambda_contrast', 0.1)
-        self.lambda_decouple = self._get_cfg_float('lambda_decouple', 0.05)
-        self.lambda_content_align = self._get_cfg_float('lambda_content_align', 0.08)
-        self.lambda_artifact_align = self._get_cfg_float('lambda_artifact_align', 0.12)
+        self.lambda_disentanglement = self._get_cfg_float('lambda_disentanglement', 0.05)
+        self.lambda_forgery_irrelevant_align = self._get_cfg_float('lambda_forgery_irrelevant_align', 0.08)
+        self.lambda_forgery_specific_align = self._get_cfg_float('lambda_forgery_specific_align', 0.12)
         self.lambda_prompt_diversity = self._get_cfg_float('lambda_prompt_diversity', 0.01)
 
         self.clip_path = "/data/disk2/yer/ASOTA/DeepfakeBench/training/config/vit/models--openai--clip-vit-large-patch14"
@@ -52,20 +52,20 @@ class SePLDetector(nn.Module):
         )
         self.backbone = self.clip_model.vision_model
 
-        self.decouple = GuidedDecoupling(
+        self.disentanglement = GuidedDecoupling(
             clip_model=self.clip_model,
             image_dim=self.backbone_dim,
-            content_dim=self.content_dim,
-            artifact_dim=self.artifact_dim,
+            forgery_irrelevant_dim=self.forgery_irrelevant_dim,
+            forgery_specific_dim=self.forgery_specific_dim,
             n_ctx=self.n_ctx,
             use_cross_attention=True,
             meta_net_hidden_dim=self.meta_net_hidden_dim
         )
 
-        self.head = nn.Linear(self.artifact_dim, 2)
+        self.head = nn.Linear(self.forgery_specific_dim, 2)
 
         self.contrast_loss_fn = SupConLoss(temperature=0.07)
-        self.alignment_loss_fn = MultiModalAlignmentLoss(temperature=0.07, projection_dim=self.content_dim)
+        self.alignment_loss_fn = MultiModalAlignmentLoss(temperature=0.07, projection_dim=self.forgery_irrelevant_dim)
         self.loss_func = nn.CrossEntropyLoss()
 
         self._train_step = 0
@@ -94,7 +94,7 @@ class SePLDetector(nn.Module):
         for name, p in self.named_parameters():
             self._saved_requires_grad[name] = p.requires_grad
 
-        logger.info("[Pretrain] Loading frozen CLIP model for content meta-net pretraining...")
+        logger.info("[Pretrain] Loading frozen CLIP model for forgery_irrelevant meta-net pretraining...")
         self.pretrain_clip = CLIPModel.from_pretrained(self.clip_path).to(device)
         self.pretrain_clip.eval()
         for p in self.pretrain_clip.parameters():
@@ -103,14 +103,14 @@ class SePLDetector(nn.Module):
         for p in self.parameters():
             p.requires_grad = False
 
-        for p in self.decouple.prompt_learner.meta_net_content.parameters():
+        for p in self.disentanglement.prompt_learner.meta_net_forgery_irrelevant.parameters():
             p.requires_grad = True
 
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         total_params = sum(p.numel() for p in self.parameters())
         logger.info(f"[Pretrain] Trainable params: {trainable_params:,}")
 
-    def pretrain_content_step(self, data_dict):
+    def pretrain_forgery_irrelevant_step(self, data_dict):
         img = data_dict['image']
         batch_size = img.size(0)
         device = img.device
@@ -119,13 +119,13 @@ class SePLDetector(nn.Module):
             vision_outputs = self.pretrain_clip.vision_model(img)
             image_features = vision_outputs.pooler_output
 
-        conditional_token = self.decouple.prompt_learner.meta_net_content(image_features)
+        conditional_token = self.disentanglement.prompt_learner.meta_net_forgery_irrelevant(image_features)
         conditional_token = conditional_token.unsqueeze(1)
 
-        ctx = self.decouple.prompt_learner.ctx_content.unsqueeze(0).expand(batch_size, -1, -1)
-        content_prompts = torch.cat([conditional_token, ctx], dim=1)
+        ctx = self.disentanglement.prompt_learner.ctx_forgery_irrelevant.unsqueeze(0).expand(batch_size, -1, -1)
+        forgery_irrelevant_prompts = torch.cat([conditional_token, ctx], dim=1)
 
-        text_features = self.decouple.encode_text_prompts(content_prompts)
+        text_features = self.disentanglement.encode_text_prompts(forgery_irrelevant_prompts)
 
         with torch.no_grad():
             image_embeds = self.pretrain_clip.visual_projection(image_features)
@@ -173,8 +173,8 @@ class SePLDetector(nn.Module):
             feat_backbone = outputs.pooler_output
         return feat_backbone
 
-    def classifier(self, artifact_feat: torch.Tensor) -> torch.Tensor:
-        return self.head(artifact_feat)
+    def classifier(self, forgery_specific_feat: torch.Tensor) -> torch.Tensor:
+        return self.head(forgery_specific_feat)
 
     def get_losses(self, data_dict: dict, pred_dict: dict) -> dict:
         label = data_dict['label']
@@ -205,18 +205,18 @@ class SePLDetector(nn.Module):
             feat_backbone = pred_dict['feat_backbone']
             contrast_loss = self.contrast_loss_fn(feat_backbone, label)
 
-            content_feat = pred_dict['content_feat']
-            artifact_feat = pred_dict['artifact_feat']
-            decouple_loss = self.decouple.compute_orthogonal_loss(content_feat, artifact_feat)
+            forgery_irrelevant_feat = pred_dict['forgery_irrelevant_feat']
+            forgery_specific_feat = pred_dict['forgery_specific_feat']
+            disentanglement_loss = self.disentanglement.compute_orthogonal_loss(forgery_irrelevant_feat, forgery_specific_feat)
 
-            content_text_feat = pred_dict['content_text_feat']
-            artifact_text_feat = pred_dict['artifact_text_feat']
-            content_align_loss = self.alignment_loss_fn(content_feat, content_text_feat, mode='content')
-            artifact_align_loss = self.alignment_loss_fn(artifact_feat, artifact_text_feat, labels=label, mode='artifact')
+            forgery_irrelevant_text_feat = pred_dict['forgery_irrelevant_text_feat']
+            forgery_specific_text_feat = pred_dict['forgery_specific_text_feat']
+            forgery_irrelevant_align_loss = self.alignment_loss_fn(forgery_irrelevant_feat, forgery_irrelevant_text_feat, mode='forgery_irrelevant')
+            forgery_specific_align_loss = self.alignment_loss_fn(forgery_specific_feat, forgery_specific_text_feat, labels=label, mode='forgery_specific')
 
             prompt_diversity_loss = (
-                self.compute_prompt_diversity_loss(content_text_feat) +
-                self.compute_prompt_diversity_loss(artifact_text_feat)
+                self.compute_prompt_diversity_loss(forgery_irrelevant_text_feat) +
+                self.compute_prompt_diversity_loss(forgery_specific_text_feat)
             ) / 2.0
 
             overall_loss = (
@@ -224,9 +224,9 @@ class SePLDetector(nn.Module):
                 lambdas['lambda_orth'] * orth_loss +
                 lambdas['lambda_ksv'] * ksv_loss +
                 lambdas['lambda_contrast'] * contrast_loss +
-                lambdas['lambda_decouple'] * decouple_loss +
-                lambdas['lambda_content_align'] * content_align_loss +
-                lambdas['lambda_artifact_align'] * artifact_align_loss +
+                lambdas['lambda_disentanglement'] * disentanglement_loss +
+                lambdas['lambda_forgery_irrelevant_align'] * forgery_irrelevant_align_loss +
+                lambdas['lambda_forgery_specific_align'] * forgery_specific_align_loss +
                 self.lambda_prompt_diversity * prompt_diversity_loss
             )
         else:
@@ -234,9 +234,9 @@ class SePLDetector(nn.Module):
             orth_loss = torch.tensor(0.0, device=pred.device)
             ksv_loss = torch.tensor(0.0, device=pred.device)
             contrast_loss = torch.tensor(0.0, device=pred.device)
-            decouple_loss = torch.tensor(0.0, device=pred.device)
-            content_align_loss = torch.tensor(0.0, device=pred.device)
-            artifact_align_loss = torch.tensor(0.0, device=pred.device)
+            disentanglement_loss = torch.tensor(0.0, device=pred.device)
+            forgery_irrelevant_align_loss = torch.tensor(0.0, device=pred.device)
+            forgery_specific_align_loss = torch.tensor(0.0, device=pred.device)
             prompt_diversity_loss = torch.tensor(0.0, device=pred.device)
 
         loss_dict = {
@@ -247,9 +247,9 @@ class SePLDetector(nn.Module):
             'orth_loss': orth_loss,
             'ksv_loss': ksv_loss,
             'contrast_loss': contrast_loss,
-            'decouple_loss': decouple_loss,
-            'content_align_loss': content_align_loss,
-            'artifact_align_loss': artifact_align_loss,
+            'disentanglement_loss': disentanglement_loss,
+            'forgery_irrelevant_align_loss': forgery_irrelevant_align_loss,
+            'forgery_specific_align_loss': forgery_specific_align_loss,
             'prompt_diversity_loss': prompt_diversity_loss,
         }
         return loss_dict
@@ -263,9 +263,9 @@ class SePLDetector(nn.Module):
             lambda_orth = 0.02 * factor
             lambda_ksv = 0.03 * factor
             lambda_contrast = self.lambda_contrast * factor
-            lambda_decouple = self.lambda_decouple * factor
-            lambda_content_align = self.lambda_content_align * factor
-            lambda_artifact_align = self.lambda_artifact_align * factor
+            lambda_disentanglement = self.lambda_disentanglement * factor
+            lambda_forgery_irrelevant_align = self.lambda_forgery_irrelevant_align * factor
+            lambda_forgery_specific_align = self.lambda_forgery_specific_align * factor
         else:
             progress = (current_step - warmup_steps) / (total_steps - warmup_steps)
             decay_factor = 1.0 if progress < 0.5 else 1.0 - 0.3 * (progress - 0.5) / 0.5
@@ -273,17 +273,17 @@ class SePLDetector(nn.Module):
             lambda_orth = 0.02 * decay_factor
             lambda_ksv = 0.03 * decay_factor
             lambda_contrast = self.lambda_contrast
-            lambda_decouple = self.lambda_decouple
-            lambda_content_align = self.lambda_content_align
-            lambda_artifact_align = self.lambda_artifact_align
+            lambda_disentanglement = self.lambda_disentanglement
+            lambda_forgery_irrelevant_align = self.lambda_forgery_irrelevant_align
+            lambda_forgery_specific_align = self.lambda_forgery_specific_align
 
         return {
             'lambda_orth': lambda_orth,
             'lambda_ksv': lambda_ksv,
             'lambda_contrast': lambda_contrast,
-            'lambda_decouple': lambda_decouple,
-            'lambda_content_align': lambda_content_align,
-            'lambda_artifact_align': lambda_artifact_align,
+            'lambda_disentanglement': lambda_disentanglement,
+            'lambda_forgery_irrelevant_align': lambda_forgery_irrelevant_align,
+            'lambda_forgery_specific_align': lambda_forgery_specific_align,
         }
 
     def get_train_metrics(self, data_dict: dict, pred_dict: dict) -> dict:
@@ -295,19 +295,19 @@ class SePLDetector(nn.Module):
     def forward(self, data_dict: dict, inference=False) -> dict:
         feat_backbone = self.features(data_dict)
 
-        content_feat, artifact_feat, content_text_feat, artifact_text_feat = self.decouple(feat_backbone)
+        forgery_irrelevant_feat, forgery_specific_feat, forgery_irrelevant_text_feat, forgery_specific_text_feat = self.disentanglement(feat_backbone)
 
-        pred = self.classifier(artifact_feat)
+        pred = self.classifier(forgery_specific_feat)
         prob = torch.softmax(pred, dim=1)[:, 1]
 
         pred_dict = {
             'cls': pred,
             'prob': prob,
-            'feat': artifact_feat,
+            'feat': forgery_specific_feat,
             'feat_backbone': feat_backbone,
-            'content_feat': content_feat,
-            'artifact_feat': artifact_feat,
-            'content_text_feat': content_text_feat,
-            'artifact_text_feat': artifact_text_feat,
+            'forgery_irrelevant_feat': forgery_irrelevant_feat,
+            'forgery_specific_feat': forgery_specific_feat,
+            'forgery_irrelevant_text_feat': forgery_irrelevant_text_feat,
+            'forgery_specific_text_feat': forgery_specific_text_feat,
         }
         return pred_dict

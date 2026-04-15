@@ -23,20 +23,20 @@ class ConditionalPromptLearner(nn.Module):
         nn.init.normal_(ctx_vectors, std=0.02)
 
         if class_specific:
-            self.ctx_content = nn.Parameter(ctx_vectors.clone())
-            self.ctx_artifact = nn.Parameter(ctx_vectors.clone())
+            self.ctx_forgery_irrelevant = nn.Parameter(ctx_vectors.clone())
+            self.ctx_forgery_specific = nn.Parameter(ctx_vectors.clone())
             print(f"Initialized class-specific static contexts: {n_ctx} tokens")
         else:
             self.ctx = nn.Parameter(ctx_vectors)
             print(f" Initialized shared static contexts: {n_ctx} tokens")
 
         if class_specific:
-            self.meta_net_content = nn.Sequential(
+            self.meta_net_forgery_irrelevant = nn.Sequential(
                 nn.Linear(image_encoder_dim, meta_net_hidden_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(meta_net_hidden_dim, ctx_dim)
             )
-            self.meta_net_artifact = nn.Sequential(
+            self.meta_net_forgery_specific = nn.Sequential(
                 nn.Linear(image_encoder_dim, meta_net_hidden_dim),
                 nn.ReLU(inplace=True),
                 nn.Linear(meta_net_hidden_dim, ctx_dim)
@@ -55,26 +55,26 @@ class ConditionalPromptLearner(nn.Module):
         batch_size = image_features.size(0)
 
         if self.class_specific:
-            ctx_content = self.ctx_content.unsqueeze(0).expand(batch_size, -1, -1)
-            ctx_artifact = self.ctx_artifact.unsqueeze(0).expand(batch_size, -1, -1)
+            ctx_forgery_irrelevant = self.ctx_forgery_irrelevant.unsqueeze(0).expand(batch_size, -1, -1)
+            ctx_forgery_specific = self.ctx_forgery_specific.unsqueeze(0).expand(batch_size, -1, -1)
 
-            conditional_content = self.meta_net_content(image_features)
-            conditional_artifact = self.meta_net_artifact(image_features)
+            conditional_forgery_irrelevant = self.meta_net_forgery_irrelevant(image_features)
+            conditional_forgery_specific = self.meta_net_forgery_specific(image_features)
 
-            conditional_content = conditional_content.unsqueeze(1)
-            conditional_artifact = conditional_artifact.unsqueeze(1)
+            conditional_forgery_irrelevant = conditional_forgery_irrelevant.unsqueeze(1)
+            conditional_forgery_specific = conditional_forgery_specific.unsqueeze(1)
         else:
             ctx = self.ctx.unsqueeze(0).expand(batch_size, -1, -1)
             conditional = self.meta_net(image_features).unsqueeze(1)
-            ctx_content = ctx
-            ctx_artifact = ctx
-            conditional_content = conditional
-            conditional_artifact = conditional
+            ctx_forgery_irrelevant = ctx
+            ctx_forgery_specific = ctx
+            conditional_forgery_irrelevant = conditional
+            conditional_forgery_specific = conditional
 
-        content_prompts = torch.cat([conditional_content, ctx_content], dim=1)
-        artifact_prompts = torch.cat([conditional_artifact, ctx_artifact], dim=1)
+        forgery_irrelevant_prompts = torch.cat([conditional_forgery_irrelevant, ctx_forgery_irrelevant], dim=1)
+        forgery_specific_prompts = torch.cat([conditional_forgery_specific, ctx_forgery_specific], dim=1)
 
-        return content_prompts, artifact_prompts
+        return forgery_irrelevant_prompts, forgery_specific_prompts
 
 
 class TextGuidedFeatureEncoder(nn.Module):
@@ -130,7 +130,7 @@ class TextGuidedFeatureEncoder(nn.Module):
 
 
 class GuidedDecoupling(nn.Module):
-    def __init__(self, clip_model, image_dim=1024, content_dim=512, artifact_dim=512,
+    def __init__(self, clip_model, image_dim=1024, forgery_irrelevant_dim=512, forgery_specific_dim=512,
                  n_ctx=16, use_cross_attention=True, meta_net_hidden_dim=256):
         super(GuidedDecoupling, self).__init__()
 
@@ -145,17 +145,17 @@ class GuidedDecoupling(nn.Module):
             meta_net_hidden_dim=meta_net_hidden_dim
         )
 
-        self.content_encoder = TextGuidedFeatureEncoder(
+        self.forgery_irrelevant_encoder = TextGuidedFeatureEncoder(
             image_dim=image_dim,
             text_dim=text_dim,
-            output_dim=content_dim,
+            output_dim=forgery_irrelevant_dim,
             use_cross_attention=use_cross_attention
         )
 
-        self.artifact_encoder = TextGuidedFeatureEncoder(
+        self.forgery_specific_encoder = TextGuidedFeatureEncoder(
             image_dim=image_dim,
             text_dim=text_dim,
-            output_dim=artifact_dim,
+            output_dim=forgery_specific_dim,
             use_cross_attention=use_cross_attention
         )
 
@@ -193,18 +193,18 @@ class GuidedDecoupling(nn.Module):
         return text_features
 
     def forward(self, image_feat):
-        content_prompts, artifact_prompts = self.prompt_learner(image_feat)
+        forgery_irrelevant_prompts, forgery_specific_prompts = self.prompt_learner(image_feat)
 
-        content_text_feat = self.encode_text_prompts(content_prompts)
-        artifact_text_feat = self.encode_text_prompts(artifact_prompts)
+        forgery_irrelevant_text_feat = self.encode_text_prompts(forgery_irrelevant_prompts)
+        forgery_specific_text_feat = self.encode_text_prompts(forgery_specific_prompts)
 
-        content_feat = self.content_encoder(image_feat, content_text_feat)
-        artifact_feat = self.artifact_encoder(image_feat, artifact_text_feat)
+        forgery_irrelevant_feat = self.forgery_irrelevant_encoder(image_feat, forgery_irrelevant_text_feat)
+        forgery_specific_feat = self.forgery_specific_encoder(image_feat, forgery_specific_text_feat)
 
-        return content_feat, artifact_feat, content_text_feat, artifact_text_feat
+        return forgery_irrelevant_feat, forgery_specific_feat, forgery_irrelevant_text_feat, forgery_specific_text_feat
 
-    def compute_orthogonal_loss(self, content_feat, artifact_feat):
-        content_norm = F.normalize(content_feat, dim=1)
-        artifact_norm = F.normalize(artifact_feat, dim=1)
-        correlation = torch.abs(torch.sum(content_norm * artifact_norm, dim=1))
+    def compute_orthogonal_loss(self, forgery_irrelevant_feat, forgery_specific_feat):
+        forgery_irrelevant_norm = F.normalize(forgery_irrelevant_feat, dim=1)
+        forgery_specific_norm = F.normalize(forgery_specific_feat, dim=1)
+        correlation = torch.abs(torch.sum(forgery_irrelevant_norm * forgery_specific_norm, dim=1))
         return correlation.mean()

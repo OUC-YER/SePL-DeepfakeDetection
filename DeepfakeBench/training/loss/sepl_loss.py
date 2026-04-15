@@ -46,17 +46,17 @@ class MultiModalAlignmentLoss(nn.Module):
             nn.LayerNorm(projection_dim)
         )
 
-    def forward(self, image_feat, text_feat, labels=None, mode='content'):
+    def forward(self, image_feat, text_feat, labels=None, mode='forgery_irrelevant'):
         text_feat_projected = self.text_projector(text_feat)
 
         image_feat_norm = F.normalize(image_feat, dim=1)
         text_feat_norm = F.normalize(text_feat_projected, dim=1)
 
-        if mode == 'content':
+        if mode == 'forgery_irrelevant':
             similarity = torch.sum(image_feat_norm * text_feat_norm, dim=1)
             loss = -similarity.mean()
 
-        elif mode == 'artifact':
+        elif mode == ' forgery-specific':
             if labels is None:
                 similarity = torch.sum(image_feat_norm * text_feat_norm, dim=1)
                 loss = -similarity.mean()
