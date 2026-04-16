@@ -1,10 +1,18 @@
 # Generalizable Deepfake Detection via Separable Prompt Learning
 
-Pipeline of SePL. TThe upper part illustrates how instance-specific prompts are generated and encoded into content and artifact text embeddings. The
-lower part shows the text-guided feature decoupling process and the cross-modal alignment objective.
-<img width="1714" height="1060" alt="p1" src="https://github.com/user-attachments/assets/05de163e-f3b7-4016-851d-c7a8961a4744" />
+ Authors: Enrui Yang, Yuezun Li (corresponding author)
+<img width="851" height="857" alt="pipeline0" src="https://github.com/user-attachments/assets/f5b124b4-ac74-438e-86d6-425340bdf41c" />
 
-[Model Weight] Download : [Google Drive](https://drive.google.com/file/d/1hIl36E695MDa6ALOGxp2cAb241MzYgCe/view?usp=sharing)
+
+| Model Weight | Download Link |
+| :--- | :--- |
+| Model Weight | [Google Drive](https://drive.google.com/file/d/1hIl36E695MDa6ALOGxp2cAb241MzYgCe/view?usp=sharing) |
+
+## Comparison with state-of-the-art deepfake detection methods on cross-dataset and cross-method evaluations.
+
+<img width="991" height="353" alt="屏幕截图 2026-04-16 100430" src="https://github.com/user-attachments/assets/fb9f1b88-e886-46eb-8005-5278534d32c9" />
+
+
 ## Environment
 
 Our environment meets the following requirements:
