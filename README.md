@@ -1,17 +1,21 @@
 # Generalizable Deepfake Detection via Separable Prompt Learning
 
- Authors: Enrui Yang, Yuezun Li (corresponding author)
-<img width="851" height="857" alt="pipeline0" src="https://github.com/user-attachments/assets/f5b124b4-ac74-438e-86d6-425340bdf41c" />
+ ### Authors: Enrui Yang, Yuezun Li (corresponding author)
+ 
+ In this paper, we present SePL, a novel CLIP-based face forgery detector.The core idea of SePL is to disentangle forgery-specific and forgery-irrelevant
+information in images via two types of prompt learning, with the former enhancing detection.
+<img width="1313" height="499" alt="屏幕截图 2026-04-18 021008" src="https://github.com/user-attachments/assets/62333b78-e849-4a01-9912-eb0103c382f7" />
 
-
-| Model Weight | Download Link |
-| :--- | :--- |
-| Model Weight | [Google Drive](https://drive.google.com/file/d/1hIl36E695MDa6ALOGxp2cAb241MzYgCe/view?usp=sharing) |
 
 ## Comparison with state-of-the-art deepfake detection methods on cross-dataset and cross-method evaluations.
 
 <img width="991" height="353" alt="屏幕截图 2026-04-16 100430" src="https://github.com/user-attachments/assets/fb9f1b88-e886-46eb-8005-5278534d32c9" />
 
+## Model Weight Download
+
+| Model Weight | Download Link |
+| :--- | :--- |
+| ckpt_best.pth | [Google Drive](https://drive.google.com/file/d/1hIl36E695MDa6ALOGxp2cAb241MzYgCe/view?usp=sharing) |
 
 ## Environment
 
@@ -25,7 +29,7 @@ Our environment meets the following requirements:
 
 > The dataset downloading and processing procedures can be referred to the implementation provided in [**DeepfakeBench**](https://github.com/SCLBD/DeepfakeBench).
 
----
+If you want to reproduce the results of our paper, you can follow the detailed procedure in [Effort](https://github.com/YZY-stack/Effort-AIGI-Detection).
 
 ## Training
 
