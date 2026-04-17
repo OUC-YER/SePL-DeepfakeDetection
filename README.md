@@ -29,7 +29,7 @@ Our environment meets the following requirements:
 
 > The dataset downloading and processing procedures can be referred to the implementation provided in [**DeepfakeBench**](https://github.com/SCLBD/DeepfakeBench).
 
-If you want to reproduce the results of our paper, you can follow the detailed procedure in [Effort](https://github.com/YZY-stack/Effort-AIGI-Detection).
+### If you want to reproduce the results of our paper, you can follow the detailed procedure in [Effort](https://github.com/YZY-stack/Effort-AIGI-Detection).
 
 ## Training
 
