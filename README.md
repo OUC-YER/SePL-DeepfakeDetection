@@ -2,7 +2,7 @@
 
  ### Authors: Enrui Yang, Yuezun Li
  
- In this paper, we present SePL, a novel CLIP-based face forgery detector. The core idea of SePL is to disentangle forgery-specific and forgery-irrelevant
+ In this paper, we present SePL, a new CLIP-based face forgery detector. The core idea of SePL is to disentangle forgery-specific and forgery-irrelevant
 information in images via two types of prompt learning, with the former enhancing detection.
 <img width="1313" height="499" alt="屏幕截图 2026-04-18 021008" src="https://github.com/user-attachments/assets/62333b78-e849-4a01-9912-eb0103c382f7" />
 
