@@ -1,8 +1,8 @@
 # Generalizable Deepfake Detection via Separable Prompt Learning
 
- ### Authors: Enrui Yang, Yuezun Li (corresponding author)
+ ### Authors: Enrui Yang, Yuezun Li
  
- In this paper, we present SePL, a novel CLIP-based face forgery detector.The core idea of SePL is to disentangle forgery-specific and forgery-irrelevant
+ In this paper, we present SePL, a novel CLIP-based face forgery detector. The core idea of SePL is to disentangle forgery-specific and forgery-irrelevant
 information in images via two types of prompt learning, with the former enhancing detection.
 <img width="1313" height="499" alt="屏幕截图 2026-04-18 021008" src="https://github.com/user-attachments/assets/62333b78-e849-4a01-9912-eb0103c382f7" />
 
@@ -52,6 +52,21 @@ To test the model, you can directly load our pre-trained weights and run a comma
 ```bash
 python3 training/test.py --detector_path ./training/config/detector/sepl.yaml --test_dataset Celeb-DF-v1 Celeb-DF-v2 DFD DFDC DFDCP WDF --weights_path ./training/weights/ckpt_best.pth
 ```
+
+---
+
+## Citations
+
+If this repo helps your research, please cite it as
+```bash
+@article{sepl,
+  author  = {--},
+  title   = {---},
+  journal = {arXiv preprint arXiv:----},
+  year    = {2026}
+}
+```
+
 
 ---
 
