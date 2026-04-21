@@ -59,10 +59,10 @@ python3 training/test.py --detector_path ./training/config/detector/sepl.yaml --
 
 If this repo helps your research, please cite it as
 ```bash
-@article{sepl,
-  author  = {--},
-  title   = {---},
-  journal = {arXiv preprint arXiv:----},
+@article{sepl2026generalizable,
+  author  = {Enrui Yang, Yuezun Li}, 
+  title   = {Generalizable Face Forgery Detection via Separable Prompt Learning},
+  journal = {arXiv preprint arXiv:2604.17307},
   year    = {2026}
 }
 ```
