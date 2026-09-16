@@ -1,6 +1,6 @@
 # Generalizable Deepfake Detection via Separable Prompt Learning
 
- ### Authors: Enrui Yang, Yuezun Li
+ ### Authors: Enrui Yang, Baoyuan Wu, Yuezun Li*
  
  In this paper, we propose Separable Prompt Learning (SePL) to better exploit the text modality, which further enhances the detection
 capacity. Specifically, SePL distills the forgery knowledge from CLIP via two separate learnable prompts, supported by a cross-modality alignment strategy and dedicated objectives.
